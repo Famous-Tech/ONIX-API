@@ -15,6 +15,12 @@
                 <img src="/images/placeholder-logo.png" alt="ONIX Logo" class="mx-auto w-32 mb-4">
                 <h1 class="text-2xl font-bold text-gray-800">ONIX Admin</h1>
             </div>
+            
+            <!-- Message d'erreur -->
+            <div id="error-message" class="hidden mb-4 p-3 bg-red-100 text-red-700 rounded-md text-center">
+                <p id="error-text">Les identifiants sont incorrects</p>
+            </div>
+
             <form action="/login" method="POST" class="space-y-6">
                 <div>
                     <label class="block text-gray-700">Nom d'utilisateur</label>
@@ -33,5 +39,22 @@
             </form>
         </div>
     </div>
+
+    <script>
+        // Gestion des messages d'erreur
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        if (error) {
+            errorMessage.classList.remove('hidden');
+            if (error === 'invalid') {
+                errorText.textContent = 'Les identifiants sont incorrects';
+            } else if (error === 'server') {
+                errorText.textContent = 'Erreur serveur, veuillez réessayer plus tard';
+            }
+        }
+    </script>
 </body>
 </html>
