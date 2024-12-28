@@ -8,6 +8,7 @@ const FormData = require('form-data');
 const config = require('./config');
 const db = require('./db');
 const authMiddleware = require('./middleware/auth');
+require('dotenv').config();
 
 const app = express();
 
@@ -37,13 +38,10 @@ app.get('/login', (req, res) => {
 app.post('/login', async (req, res) => {
     const { username, password } = req.body;
     try {
-        const result = await db.query('SELECT * FROM admins WHERE username = $1', [username]);
-        if (result.rows.length > 0) {
-            const validPassword = await bcrypt.compare(password, result.rows[0].password);
-            if (validPassword) {
-                req.session.adminId = result.rows[0].id;
-                return res.redirect('/dashboard');
-            }
+        // Vérification avec les variables d'environnement
+        if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+            req.session.adminId = 1; // Définit la session qui sera vérifiée par authMiddleware
+            return res.redirect('/dashboard');
         }
         // Si l'authentification échoue
         res.status(401).redirect('/login?error=invalid');
