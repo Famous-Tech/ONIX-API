@@ -30,6 +30,10 @@ const upload = multer({
 });
 
 // Routes d'authentification
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
 app.post('/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -38,16 +42,14 @@ app.post('/login', async (req, res) => {
             const validPassword = await bcrypt.compare(password, result.rows[0].password);
             if (validPassword) {
                 req.session.adminId = result.rows[0].id;
-                res.redirect('/dashboard');
-            } else {
-                res.redirect('/login?error=invalid');
+                return res.redirect('/dashboard');
             }
-        } else {
-            res.redirect('/login?error=invalid');
         }
+        // Si l'authentification échoue
+        res.status(401).redirect('/login?error=invalid');
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Erreur serveur' });
+        res.status(500).redirect('/login?error=server');
     }
 });
 
@@ -152,7 +154,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
 
 // Routes pour servir les pages HTML
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+    res.redirect('/login');
 });
 
 app.get('/dashboard', authMiddleware, (req, res) => {
