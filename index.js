@@ -9,7 +9,6 @@ const unlinkAsync = promisify(fs.unlink);
 
 const config = require('./config');
 
-// Configuration de la base de données avec SSL
 const pool = new Pool({
   user: config.db.user,
   host: config.db.host,
@@ -18,11 +17,10 @@ const pool = new Pool({
   port: config.db.port,
   ssl: {
     require: true,
-    rejectUnauthorized: false // Nécessaire pour certains services cloud comme Heroku
+    rejectUnauthorized: false
   }
 });
 
-// Le reste du code reste identique
 const db = {
   query: (text, params) => pool.query(text, params),
   async initDb() {
@@ -30,9 +28,23 @@ const db = {
     try {
       await client.query('BEGIN');
 
-      // Création de la table products
+      // Vérifier si la table products existe déjà
+      const tableExists = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'products'
+        );
+      `);
+
+      // Si la table existe, la supprimer pour la recréer avec la bonne structure
+      if (tableExists.rows[0].exists) {
+        await client.query('DROP TABLE IF EXISTS order_items CASCADE');
+        await client.query('DROP TABLE IF EXISTS products CASCADE');
+      }
+
+      // Création de la table products avec la bonne structure
       await client.query(`
-        CREATE TABLE IF NOT EXISTS products (
+        CREATE TABLE products (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
           description TEXT NOT NULL,
@@ -102,6 +114,15 @@ const db = {
       `);
 
       await client.query('COMMIT');
+      
+      // Vérifier la structure de la table
+      const columns = await client.query(`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = 'products';
+      `);
+      console.log('Table products structure:', columns.rows);
+      
       console.log('Database initialized successfully');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -117,7 +138,6 @@ const upload = multer({ dest: 'uploads/' });
 
 app.use(express.json());
 
-// Upload d'image vers Catbox
 async function uploadToCatbox(filePath) {
   const form = new FormData();
   form.append('reqtype', 'fileupload');
@@ -135,7 +155,6 @@ async function uploadToCatbox(filePath) {
   }
 }
 
-// Routes pour les produits
 app.post('/products', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
@@ -268,7 +287,6 @@ app.delete('/products/:id', async (req, res) => {
   }
 });
 
-// Initialiser la base de données et démarrer le serveur
 db.initDb()
   .then(() => {
     app.listen(config.port, () => {
