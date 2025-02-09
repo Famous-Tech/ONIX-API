@@ -4,17 +4,113 @@ const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const { promisify } = require('util');
+const { Pool } = require('pg');
 const unlinkAsync = promisify(fs.unlink);
 
-const db = require('./db');
 const config = require('./config');
-const ordersRouter = require('./orders');
+
+// Configuration de la base de données
+const pool = new Pool({
+  user: config.db.user,
+  host: config.db.host,
+  database: config.db.database,
+  password: config.db.password,
+  port: config.db.port,
+});
+
+const db = {
+  query: (text, params) => pool.query(text, params),
+  async initDb() {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Création de la table products
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS products (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT NOT NULL,
+          price_htg NUMERIC(10, 2) NOT NULL,
+          image_url TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Création de la table orders
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id SERIAL PRIMARY KEY,
+          customer_name VARCHAR(255) NOT NULL,
+          customer_email VARCHAR(255) NOT NULL,
+          customer_phone VARCHAR(50),
+          total_amount NUMERIC(10, 2) NOT NULL,
+          status VARCHAR(50) DEFAULT 'pending',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Création de la table order_items
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS order_items (
+          id SERIAL PRIMARY KEY,
+          order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+          product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+          quantity INTEGER NOT NULL,
+          price_at_time NUMERIC(10, 2) NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Création du trigger pour updated_at
+      await client.query(`
+        CREATE OR REPLACE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $$ language 'plpgsql';
+      `);
+
+      // Ajout des triggers sur les tables
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_products_updated_at') THEN
+            CREATE TRIGGER update_products_updated_at
+              BEFORE UPDATE ON products
+              FOR EACH ROW
+              EXECUTE FUNCTION update_updated_at_column();
+          END IF;
+
+          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_orders_updated_at') THEN
+            CREATE TRIGGER update_orders_updated_at
+              BEFORE UPDATE ON orders
+              FOR EACH ROW
+              EXECUTE FUNCTION update_updated_at_column();
+          END IF;
+        END
+        $$;
+      `);
+
+      await client.query('COMMIT');
+      console.log('Database initialized successfully');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw new Error(`Database initialization failed: ${err.message}`);
+    } finally {
+      client.release();
+    }
+  }
+};
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
 app.use(express.json());
-app.use('/', ordersRouter);
 
 // Upload d'image vers Catbox
 async function uploadToCatbox(filePath) {
@@ -26,25 +122,23 @@ async function uploadToCatbox(filePath) {
     const response = await axios.post('https://catbox.moe/user/api.php', form, {
       headers: { ...form.getHeaders() }
     });
-    return response.data; // URL de l'image
+    return response.data;
   } catch (err) {
     throw new Error(`Failed to upload image to Catbox: ${err.message}`);
   } finally {
-    await unlinkAsync(filePath); // Nettoyer le fichier temporaire
+    await unlinkAsync(filePath);
   }
 }
 
-// Créer un produit
+// Routes pour les produits
 app.post('/products', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
 
-    // Validation des champs obligatoires
     if (!name || !description || !price_htg) {
       return res.status(400).json({ error: 'Missing required fields: name, description, price_htg' });
     }
 
-    // Validation du type de price_htg
     if (isNaN(price_htg)) {
       return res.status(400).json({ error: 'price_htg must be a number' });
     }
@@ -69,7 +163,6 @@ app.post('/products', upload.single('image'), async (req, res) => {
   }
 });
 
-// Obtenir tous les produits
 app.get('/products', async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM products ORDER BY id');
@@ -79,13 +172,11 @@ app.get('/products', async (req, res) => {
   }
 });
 
-// Mettre à jour un produit
 app.put('/products/:id', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
-
-    // Vérifier que l'ID est valide
     const productId = parseInt(req.params.id);
+    
     if (isNaN(productId)) {
       return res.status(400).json({ error: 'Invalid product ID' });
     }
@@ -150,7 +241,6 @@ app.put('/products/:id', upload.single('image'), async (req, res) => {
   }
 });
 
-// Supprimer un produit
 app.delete('/products/:id', async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
@@ -184,3 +274,5 @@ db.initDb()
     console.error('Failed to start server:', err);
     process.exit(1);
   });
+
+module.exports = app;
