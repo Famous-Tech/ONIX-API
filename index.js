@@ -9,15 +9,20 @@ const unlinkAsync = promisify(fs.unlink);
 
 const config = require('./config');
 
-// Configuration de la base de données
+// Configuration de la base de données avec SSL
 const pool = new Pool({
   user: config.db.user,
   host: config.db.host,
   database: config.db.database,
   password: config.db.password,
   port: config.db.port,
+  ssl: {
+    require: true,
+    rejectUnauthorized: false // Nécessaire pour certains services cloud comme Heroku
+  }
 });
 
+// Le reste du code reste identique
 const db = {
   query: (text, params) => pool.query(text, params),
   async initDb() {
