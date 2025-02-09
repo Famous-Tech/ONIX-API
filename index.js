@@ -1,4 +1,3 @@
-// index.js
 const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
@@ -28,6 +27,8 @@ async function uploadToCatbox(filePath) {
       headers: { ...form.getHeaders() }
     });
     return response.data; // URL de l'image
+  } catch (err) {
+    throw new Error(`Failed to upload image to Catbox: ${err.message}`);
   } finally {
     await unlinkAsync(filePath); // Nettoyer le fichier temporaire
   }
@@ -37,20 +38,34 @@ async function uploadToCatbox(filePath) {
 app.post('/products', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
-    let imageUrl = null;
 
+    // Validation des champs obligatoires
+    if (!name || !description || !price_htg) {
+      return res.status(400).json({ error: 'Missing required fields: name, description, price_htg' });
+    }
+
+    // Validation du type de price_htg
+    if (isNaN(price_htg)) {
+      return res.status(400).json({ error: 'price_htg must be a number' });
+    }
+
+    let imageUrl = null;
     if (req.file) {
-      imageUrl = await uploadToCatbox(req.file.path);
+      try {
+        imageUrl = await uploadToCatbox(req.file.path);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
     }
 
     const result = await db.query(
       'INSERT INTO products (name, description, price_htg, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
       [name, description, price_htg, imageUrl]
     );
-    
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: `Failed to create product: ${err.message}` });
   }
 });
 
@@ -60,7 +75,7 @@ app.get('/products', async (req, res) => {
     const result = await db.query('SELECT * FROM products ORDER BY id');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: `Failed to fetch products: ${err.message}` });
   }
 });
 
@@ -68,10 +83,20 @@ app.get('/products', async (req, res) => {
 app.put('/products/:id', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
-    let imageUrl = undefined;
 
+    // Vérifier que l'ID est valide
+    const productId = parseInt(req.params.id);
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+
+    let imageUrl = undefined;
     if (req.file) {
-      imageUrl = await uploadToCatbox(req.file.path);
+      try {
+        imageUrl = await uploadToCatbox(req.file.path);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
     }
 
     const updateFields = [];
@@ -89,6 +114,9 @@ app.put('/products/:id', upload.single('image'), async (req, res) => {
       valueIndex++;
     }
     if (price_htg) {
+      if (isNaN(price_htg)) {
+        return res.status(400).json({ error: 'price_htg must be a number' });
+      }
       updateFields.push(`price_htg = $${valueIndex}`);
       values.push(price_htg);
       valueIndex++;
@@ -99,7 +127,11 @@ app.put('/products/:id', upload.single('image'), async (req, res) => {
       valueIndex++;
     }
 
-    values.push(req.params.id);
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(productId);
     const query = `
       UPDATE products 
       SET ${updateFields.join(', ')} 
@@ -111,25 +143,33 @@ app.put('/products/:id', upload.single('image'), async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: `Failed to update product: ${err.message}` });
   }
 });
 
 // Supprimer un produit
 app.delete('/products/:id', async (req, res) => {
   try {
+    const productId = parseInt(req.params.id);
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+
     const result = await db.query(
       'DELETE FROM products WHERE id = $1 RETURNING *',
-      [req.params.id]
+      [productId]
     );
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
     res.json({ message: 'Product deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: `Failed to delete product: ${err.message}` });
   }
 });
 
