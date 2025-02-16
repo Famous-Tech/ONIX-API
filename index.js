@@ -7,6 +7,8 @@ const cors = require('cors');
 const { promisify } = require('util');
 const { Pool } = require('pg');
 const unlinkAsync = promisify(fs.unlink);
+
+const app = express();
 const corsOptions = {
   origin: '*', // Pour le développement seulement - Je mettrai le domaine en production
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
