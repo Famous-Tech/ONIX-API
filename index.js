@@ -143,7 +143,6 @@ const db = {
   }
 };
 
-const app = express();
 const upload = multer({ dest: 'uploads/' });
 
 app.use(express.json());
