@@ -33,114 +33,6 @@ const pool = new Pool({
 
 const db = {
   query: (text, params) => pool.query(text, params),
-  async initDb() {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Vérifier si la table products existe déjà
-      const tableExists = await client.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_name = 'products'
-        );
-      `);
-
-      // Si la table existe, la supprimer pour la recréer avec la bonne structure
-      if (tableExists.rows[0].exists) {
-        await client.query('DROP TABLE IF EXISTS order_items CASCADE');
-        await client.query('DROP TABLE IF EXISTS products CASCADE');
-      }
-
-      // Création de la table products avec la bonne structure
-      await client.query(`
-        CREATE TABLE products (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          description TEXT NOT NULL,
-          price_htg NUMERIC(10, 2) NOT NULL,
-          image_url TEXT,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-
-      // Création de la table orders
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS orders (
-          id SERIAL PRIMARY KEY,
-          customer_name VARCHAR(255) NOT NULL,
-          customer_email VARCHAR(255) NOT NULL,
-          customer_phone VARCHAR(50),
-          total_amount NUMERIC(10, 2) NOT NULL,
-          status VARCHAR(50) DEFAULT 'pending',
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-
-      // Création de la table order_items
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS order_items (
-          id SERIAL PRIMARY KEY,
-          order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
-          product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
-          quantity INTEGER NOT NULL,
-          price_at_time NUMERIC(10, 2) NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-
-      // Création du trigger pour updated_at
-      await client.query(`
-        CREATE OR REPLACE FUNCTION update_updated_at_column()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            NEW.updated_at = CURRENT_TIMESTAMP;
-            RETURN NEW;
-        END;
-        $$ language 'plpgsql';
-      `);
-
-      // Ajout des triggers sur les tables
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_products_updated_at') THEN
-            CREATE TRIGGER update_products_updated_at
-              BEFORE UPDATE ON products
-              FOR EACH ROW
-              EXECUTE FUNCTION update_updated_at_column();
-          END IF;
-
-          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_orders_updated_at') THEN
-            CREATE TRIGGER update_orders_updated_at
-              BEFORE UPDATE ON orders
-              FOR EACH ROW
-              EXECUTE FUNCTION update_updated_at_column();
-          END IF;
-        END
-        $$;
-      `);
-
-      await client.query('COMMIT');
-      
-      // Vérifier la structure de la table
-      const columns = await client.query(`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'products';
-      `);
-      console.log('Table products structure:', columns.rows);
-      
-      console.log('Database initialized successfully');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw new Error(`Database initialization failed: ${err.message}`);
-    } finally {
-      client.release();
-    }
-  }
 };
 
 const upload = multer({ dest: 'uploads/' });
@@ -296,15 +188,8 @@ app.delete('/products/:id', async (req, res) => {
   }
 });
 
-db.initDb()
-  .then(() => {
-    app.listen(config.port, () => {
-      console.log(`Server running on port ${config.port}`);
-    });
-  })
-  .catch(err => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  });
+app.listen(config.port, () => {
+  console.log(`Server running on port ${config.port}`);
+});
 
 module.exports = app;
