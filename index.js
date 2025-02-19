@@ -115,6 +115,42 @@ app.get('/products/:id', async (req, res) => {
   }
 });
 
+app.post('/orders', async (req, res) => {
+  try {
+    const { items, userId } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty items array' });
+    }
+
+    // Vérifier que chaque item a un product_id et une quantité valide
+    for (const item of items) {
+      if (!item.product_id || isNaN(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({ error: 'Invalid item data' });
+      }
+    }
+
+    // Insérer la commande dans la base de données
+    const orderResult = await db.query(
+      'INSERT INTO orders (user_id) VALUES ($1) RETURNING id',
+      [userId]
+    );
+    const orderId = orderResult.rows[0].id;
+
+    // Insérer les items de la commande
+    for (const item of items) {
+      await db.query(
+        'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+        [orderId, item.product_id, item.quantity]
+      );
+    }
+
+    res.status(201).json({ orderId, message: 'Order created successfully' });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to create order: ${err.message}` });
+  }
+});
+
 app.put('/products/:id', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
