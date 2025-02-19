@@ -97,6 +97,24 @@ app.get('/products', async (req, res) => {
   }
 });
 
+app.get('/products/:id', async (req, res) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+
+    const result = await db.query('SELECT * FROM products WHERE id = $1', [productId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to fetch product: ${err.message}` });
+  }
+});
+
 app.put('/products/:id', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
