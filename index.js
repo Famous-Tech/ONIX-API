@@ -56,6 +56,7 @@ async function uploadToCatbox(filePath) {
   }
 }
 
+// Routes pour les produits
 app.post('/products', upload.single('image'), async (req, res) => {
   try {
     const { name, description, price_htg } = req.body;
@@ -112,42 +113,6 @@ app.get('/products/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch product: ${err.message}` });
-  }
-});
-
-app.post('/orders', async (req, res) => {
-  try {
-    const { items, userId } = req.body;
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Invalid or empty items array' });
-    }
-
-    // Vérifier que chaque item a un product_id et une quantité valide
-    for (const item of items) {
-      if (!item.product_id || isNaN(item.quantity) || item.quantity <= 0) {
-        return res.status(400).json({ error: 'Invalid item data' });
-      }
-    }
-
-    // Insérer la commande dans la base de données
-    const orderResult = await db.query(
-      'INSERT INTO orders (user_id) VALUES ($1) RETURNING id',
-      [userId]
-    );
-    const orderId = orderResult.rows[0].id;
-
-    // Insérer les items de la commande
-    for (const item of items) {
-      await db.query(
-        'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
-        [orderId, item.product_id, item.quantity]
-      );
-    }
-
-    res.status(201).json({ orderId, message: 'Order created successfully' });
-  } catch (err) {
-    res.status(500).json({ error: `Failed to create order: ${err.message}` });
   }
 });
 
@@ -239,6 +204,76 @@ app.delete('/products/:id', async (req, res) => {
     res.json({ message: 'Product deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete product: ${err.message}` });
+  }
+});
+
+// Routes pour les commandes
+app.post('/orders', async (req, res) => {
+  try {
+    const { items, userId } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty items array' });
+    }
+
+    for (const item of items) {
+      if (!item.product_id || isNaN(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({ error: 'Invalid item data' });
+      }
+    }
+
+    const orderResult = await db.query(
+      'INSERT INTO orders (user_id) VALUES ($1) RETURNING id',
+      [userId]
+    );
+    const orderId = orderResult.rows[0].id;
+
+    for (const item of items) {
+      await db.query(
+        'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+        [orderId, item.product_id, item.quantity]
+      );
+    }
+
+    res.status(201).json({ orderId, message: 'Order created successfully' });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to create order: ${err.message}` });
+  }
+});
+
+app.get('/orders', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT o.*, 
+        json_agg(json_build_object(
+          'product_id', oi.product_id,
+          'quantity', oi.quantity,
+          'price_at_time', oi.price_at_time
+        )) as items
+      FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      GROUP BY o.id
+      ORDER BY o.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/orders/:id', async (req, res) => {
+  const { status } = req.body;
+  try {
+    const result = await db.query(
+      'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
+      [status, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
