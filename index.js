@@ -294,6 +294,27 @@ app.get('/orders', async (req, res) => {
   }
 });
 
+const saltRounds = 10;
+
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const result = await db.query(
+      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *',
+      [username, hashedPassword]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to register user: ${err.message}` });
+  }
+});
+
 app.patch('/orders/:id', async (req, res) => {
   const { status } = req.body;
   try {
