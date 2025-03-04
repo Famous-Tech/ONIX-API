@@ -9,6 +9,6 @@ module.exports = {
     port: process.env.DB_PORT || 5432,
     ssl: process.env.DB_SSL || { rejectUnauthorized: false } // SSL configuration
   },
-  jwtSecret: 'onyx-secret0938499i0wn9u97trnc7e0a68wb'
+  jwtSecret: 'onyx-secret0938499i0wn9u97trnc7e0a68wb',
   port: process.env.PORT || 3000
 };
