@@ -89,6 +89,39 @@ app.post('/products', upload.single('image'), async (req, res) => {
   }
 });
 
+// Route pour la connexion
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  try {
+    // Recherchez l'utilisateur dans la base de données
+    const userResult = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = userResult.rows[0];
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Vérifiez le mot de passe
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Générez un token JWT
+    const token = jwt.sign({ userId: user.id, username: user.username }, config.jwtSecret, { expiresIn: '1h' });
+
+    // Renvoyez le token et les informations de l'utilisateur
+    res.json({ success: true, token, user: { id: user.id, username: user.username } });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to login: ${err.message}` });
+  }
+});
+
 app.get('/products', async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM products ORDER BY id');
