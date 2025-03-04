@@ -31,6 +31,21 @@ const initDb = async () => {
         quantity INTEGER NOT NULL,
         price_at_time DECIMAL(10,2) NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        token TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     console.log('Database initialized successfully');
   } catch (err) {
