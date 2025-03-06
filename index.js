@@ -6,6 +6,8 @@ const fs = require('fs');
 const cors = require('cors');
 const { promisify } = require('util');
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const unlinkAsync = promisify(fs.unlink);
 
 const app = express();
@@ -56,17 +58,21 @@ async function uploadToCatbox(filePath) {
   }
 }
 
-// Routes pour les produits
+// Mise à jour de la structure de la table (si nécessaire)
+// Cette requête devra être exécutée sur la base de données
+// ALTER TABLE products RENAME COLUMN price_htg TO price;
+
+// Mise à jour de la route POST pour créer des produits
 app.post('/products', upload.single('image'), async (req, res) => {
   try {
-    const { name, description, price_htg } = req.body;
+    const { name, description, price } = req.body;
 
-    if (!name || !description || !price_htg) {
-      return res.status(400).json({ error: 'Missing required fields: name, description, price_htg' });
+    if (!name || !description || !price) {
+      return res.status(400).json({ error: 'Missing required fields: name, description, price' });
     }
 
-    if (isNaN(price_htg)) {
-      return res.status(400).json({ error: 'price_htg must be a number' });
+    if (isNaN(price)) {
+      return res.status(400).json({ error: 'price must be a number' });
     }
 
     let imageUrl = null;
@@ -79,11 +85,21 @@ app.post('/products', upload.single('image'), async (req, res) => {
     }
 
     const result = await db.query(
-      'INSERT INTO products (name, description, price_htg, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, description, price_htg, imageUrl]
+      'INSERT INTO products (name, description, price, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, description, price, imageUrl]
     );
 
-    res.status(201).json(result.rows[0]);
+    // Format de réponse pour la compatibilité avec les composants Front-end
+    const product = {
+      id: result.rows[0].id,
+      name: result.rows[0].name,
+      description: result.rows[0].description,
+      price: parseFloat(result.rows[0].price),
+      image_url: result.rows[0].image_url,
+      image: result.rows[0].image_url // Ajouter le champ image pour la compatibilité
+    };
+
+    res.status(201).json(product);
   } catch (err) {
     res.status(500).json({ error: `Failed to create product: ${err.message}` });
   }
@@ -122,15 +138,28 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// Mise à jour de la route GET pour récupérer tous les produits
 app.get('/products', async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM products ORDER BY id');
-    res.json(result.rows);
+    
+    // Reformater les données pour correspondre au format attendu par le front-end
+    const products = result.rows.map(product => ({
+      id: product.id.toString(), // Convertir en string pour correspondre au type guard
+      name: product.name,
+      description: product.description,
+      price: parseFloat(product.price),
+      image_url: product.image_url,
+      image: product.image_url // Ajouter le champ image pour la compatibilité
+    }));
+    
+    res.json(products);
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch products: ${err.message}` });
   }
 });
 
+// Mise à jour de la route GET pour récupérer un produit spécifique
 app.get('/products/:id', async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
@@ -143,15 +172,26 @@ app.get('/products/:id', async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    res.json(result.rows[0]);
+    // Reformater pour correspondre au format attendu par le composant ProductDetails
+    const product = {
+      id: result.rows[0].id.toString(),
+      name: result.rows[0].name,
+      description: result.rows[0].description,
+      price: parseFloat(result.rows[0].price),
+      image_url: result.rows[0].image_url,
+      image: result.rows[0].image_url // Ajouter le champ image pour la compatibilité
+    };
+    
+    res.json(product);
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch product: ${err.message}` });
   }
 });
 
+// Mise à jour de la route PUT pour mettre à jour un produit
 app.put('/products/:id', upload.single('image'), async (req, res) => {
   try {
-    const { name, description, price_htg } = req.body;
+    const { name, description, price } = req.body;
     const productId = parseInt(req.params.id);
     
     if (isNaN(productId)) {
@@ -181,12 +221,12 @@ app.put('/products/:id', upload.single('image'), async (req, res) => {
       values.push(description);
       valueIndex++;
     }
-    if (price_htg) {
-      if (isNaN(price_htg)) {
-        return res.status(400).json({ error: 'price_htg must be a number' });
+    if (price) {
+      if (isNaN(price)) {
+        return res.status(400).json({ error: 'price must be a number' });
       }
-      updateFields.push(`price_htg = $${valueIndex}`);
-      values.push(price_htg);
+      updateFields.push(`price = $${valueIndex}`);
+      values.push(price);
       valueIndex++;
     }
     if (imageUrl) {
@@ -212,7 +252,17 @@ app.put('/products/:id', upload.single('image'), async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    res.json(result.rows[0]);
+    // Reformater pour correspondre au format attendu
+    const product = {
+      id: result.rows[0].id.toString(),
+      name: result.rows[0].name,
+      description: result.rows[0].description,
+      price: parseFloat(result.rows[0].price),
+      image_url: result.rows[0].image_url,
+      image: result.rows[0].image_url
+    };
+    
+    res.json(product);
   } catch (err) {
     res.status(500).json({ error: `Failed to update product: ${err.message}` });
   }
