@@ -42,6 +42,52 @@ const upload = multer({ dest: 'uploads/' });
 
 app.use(express.json());
 
+// Middleware de logging pour chaque requête API
+app.use((req, res, next) => {
+  const start = Date.now();
+  const timestamp = new Date().toISOString();
+  
+  // Log au début de la requête
+  console.log(`[${timestamp}] ${req.method} ${req.originalUrl} - Request started`);
+  
+  // Capturer les paramètres de la requête sans données sensibles
+  const requestData = {
+    params: req.params,
+    query: req.query,
+    body: req.method !== 'GET' ? sanitizeRequestBody(req.body) : undefined
+  };
+  
+  console.log(`[${timestamp}] Request data:`, JSON.stringify(requestData));
+  
+  // Intercepter la fin de la réponse pour logger les résultats
+  const originalEnd = res.end;
+  res.end = function(chunk, encoding) {
+    const duration = Date.now() - start;
+    const endTimestamp = new Date().toISOString();
+    
+    console.log(`[${endTimestamp}] ${req.method} ${req.originalUrl} - Response status: ${res.statusCode} - Duration: ${duration}ms`);
+    
+    return originalEnd.call(this, chunk, encoding);
+  };
+  
+  next();
+});
+
+// Fonction pour sanitiser les données de la requête (éviter de logger des données sensibles)
+function sanitizeRequestBody(body) {
+  if (!body) return {};
+  
+  const sanitized = { ...body };
+  
+  // Masquer les mots de passe
+  if (sanitized.password) sanitized.password = '[MASKED]';
+  
+  // Évitez de logger des fichiers ou des données volumineuses
+  if (sanitized.image) sanitized.image = '[IMAGE DATA]';
+  
+  return sanitized;
+}
+
 async function uploadToCatbox(filePath) {
   const form = new FormData();
   form.append('reqtype', 'fileupload');
