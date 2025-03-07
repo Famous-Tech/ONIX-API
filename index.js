@@ -189,24 +189,37 @@ app.post('/login', async (req, res) => {
 // Mise à jour de la route GET pour récupérer tous les produits
 app.get('/products', async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM products ORDER BY id');
+    console.log('Début de la récupération des produits');
     
-    // Reformater les données pour correspondre au format attendu par le front-end
+    // Vérifier la connexion à la base de données
+    console.log('Test de connexion à la base de données...');
+    await db.query('SELECT 1');
+    console.log('Connexion à la base de données réussie');
+    
+    // Vérifier si la table existe
+    console.log('Vérification de la table products...');
+    await db.query('SELECT * FROM products LIMIT 1');
+    console.log('Table products accessible');
+    
+    const result = await db.query('SELECT * FROM products ORDER BY id');
+    console.log(`${result.rows.length} produits récupérés de la base de données`);
+    
+    // Reformater les données
     const products = result.rows.map(product => ({
-      id: product.id.toString(), // Convertir en string pour correspondre au type guard
+      id: product.id.toString(),
       name: product.name,
       description: product.description,
       price: parseFloat(product.price),
       image_url: product.image_url,
-      image: product.image_url // Ajouter le champ image pour la compatibilité
+      image: product.image_url
     }));
     
     res.json(products);
   } catch (err) {
+    console.error('Erreur détaillée:', err);
     res.status(500).json({ error: `Failed to fetch products: ${err.message}` });
   }
 });
-
 // Mise à jour de la route GET pour récupérer un produit spécifique
 app.get('/products/:id', async (req, res) => {
   try {
