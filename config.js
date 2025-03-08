@@ -2,13 +2,13 @@ require('dotenv').config();
 
 module.exports = {
   db: {
-    user: process.env.DB_USER || 'neondb_owner',
-    host: process.env.DB_HOST || 'ep-bitter-math-a8ohsbm2-pooler.eastus2.azure.neon.tech',
-    database: process.env.DB_NAME || 'neondb',
-    password: process.env.DB_PASSWORD || 'dztnfvLhM2r6',
+    user: process.env.DB_USER || 'onix_owner',
+    host: process.env.DB_HOST || 'ep-empty-night-a8fkr5ob-pooler.eastus2.azure.neon.tech',
+    database: process.env.DB_NAME || 'onix',
+    password: process.env.DB_PASSWORD || 'npg_3AqQWU9LdrFk',
     port: process.env.DB_PORT || 5432,
-    ssl: process.env.DB_SSL || { rejectUnauthorized: false } // SSL configuration
+    ssl: process.env.DB_SSL === 'require' ? { rejectUnauthorized: false } : false // SSL configuration
   },
-  jwtSecret: 'onyx-secret0938499i0wn9u97trnc7e0a68wb',
+  jwtSecret: process.env.JWT_SECRET || 'onyx-secret0938499i0wn9u97trnc7e0a68wb',
   port: process.env.PORT || 3000
 };
