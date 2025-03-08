@@ -29,7 +29,7 @@ const pool = new Pool({
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT || 5432,
-  ssl: process.env.DB_SSL === 'true' ? {
+  ssl: process.env.DB_SSL === 'require' ? {
     require: true,
     rejectUnauthorized: false
   } : false
