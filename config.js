@@ -7,7 +7,7 @@ module.exports = {
     database: process.env.DB_NAME || 'onix',
     password: process.env.DB_PASSWORD || 'npg_3AqQWU9LdrFk',
     port: process.env.DB_PORT || 5432,
-    ssl: process.env.DB_SSL === 'require' ? { rejectUnauthorized: false } : true // SSL configuration
+    ssl: process.env.DB_SSL === 'require' ? { rejectUnauthorized: false } : false // SSL configuration
   },
   jwtSecret: process.env.JWT_SECRET || 'onyx-secret0938499i0wn9u97trnc7e0a68wb',
   port: process.env.PORT || 3000
