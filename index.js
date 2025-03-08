@@ -7,6 +7,7 @@ const cors = require('cors');
 const { promisify } = require('util');
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
+require('dotenv').config();
 const unlinkAsync = promisify(fs.unlink);
 
 // Charger les variables d'environnement
