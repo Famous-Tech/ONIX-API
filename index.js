@@ -22,18 +22,54 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Configuration de la base de données à partir des variables d'environnement
+// Configuration de la base de données avec DATABASE_URL
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_DATABASE,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT || 5432,
-  ssl: process.env.DB_SSL === 'require' ? {
+  connectionString: process.env.DATABASE_URL || 'postgresql://onix_owner:npg_3AqQWU9LdrFk@ep-empty-night-a8fkr5ob-pooler.eastus2.azure.neon.tech/onix?sslmode=require',
+  ssl: {
     require: true,
     rejectUnauthorized: false
-  } : false
+  }
 });
+
+// Initialisation des tables
+const initDb = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        price DECIMAL(10,2) NOT NULL,
+        image_url TEXT
+      );
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER REFERENCES orders(id),
+        product_id INTEGER REFERENCES products(id),
+        quantity INTEGER NOT NULL,
+        price_at_time DECIMAL(10,2)
+      );
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Database initialized successfully');
+  } catch (err) {
+    console.error('Error initializing database:', err);
+  }
+};
+
+// Exécuter l'initialisation de la base de données au démarrage
+initDb();
 
 const db = {
   query: (text, params) => pool.query(text, params),
@@ -105,10 +141,6 @@ async function uploadToCatbox(filePath) {
     await unlinkAsync(filePath);
   }
 }
-
-// Mise à jour de la structure de la table (si nécessaire)
-// Cette requête devra être exécutée sur la base de données
-// ALTER TABLE products RENAME COLUMN price_htg TO price;
 
 // Mise à jour de la route POST pour créer des produits
 app.post('/products', upload.single('image'), async (req, res) => {
@@ -221,6 +253,7 @@ app.get('/products', async (req, res) => {
     res.status(500).json({ error: `Failed to fetch products: ${err.message}` });
   }
 });
+
 // Mise à jour de la route GET pour récupérer un produit spécifique
 app.get('/products/:id', async (req, res) => {
   try {
